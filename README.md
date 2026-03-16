@@ -1,40 +1,38 @@
 # AufurWizard
 
-A terminal-based secure file shredding tool for **Linux** and **macOS**.
+A terminal-based secure file shredder for Linux and macOS. Built with Python and Textual.
 
-```
-┌──────────────────────────────────────────────┐
-│  AufurWizard                                 │
-│                                              │
-│  ❯ Shred files / folders                     │
-│    Shred disk / partition                    │
-│    View history                              │
-│    Quit                                      │
-└──────────────────────────────────────────────┘
-```
+Supports multiple wipe standards — from a quick zero-fill to the full 35-pass Gutmann algorithm. Operates on individual files, folders, and raw block devices/partitions.
+
+-----
 
 ## Features
 
-- Multiple wipe standards: Zero Fill, Random, DoD 3-Pass, DoD 7-Pass, Gutmann 35-Pass
-- Shred individual files, entire folders, or raw block devices / partitions
-- Cryptographically random data via Python's `secrets` module
-- Verification pass after DoD standards
-- Operation history log at `~/.aufur_wizard/history.log`
-- Fully keyboard-navigable TUI
+- **Multiple wipe standards** — Zero Fill, Random, DoD 3-Pass, DoD 7-Pass, Gutmann 35-Pass
+- **File & folder shredding** — recursively wipes directory trees
+- **Block device wiping** — targets raw disks and partitions (requires root)
+- **Operation history** — logs every shred to `~/.aufur_wizard/history.log`
+- **Terminal UI** — keyboard-navigable interface via Textual
+
+-----
+
+## Requirements
+
+- Python 3.11+
+- Linux or macOS
+- Root/sudo access for block device operations
+
+-----
 
 ## Installation
 
 ```bash
-pip install aufur-wizard
-```
-
-Or from source:
-
-```bash
 git clone https://github.com/joelwizard404/AuferWizard.git
 cd AuferWizard
-pip install .
+pip install -e .
 ```
+
+-----
 
 ## Usage
 
@@ -42,27 +40,34 @@ pip install .
 aufur
 ```
 
-Wiping block devices requires root:
+Or without installing:
 
 ```bash
-sudo aufur
+python -m aufur_wizard.main
 ```
+
+Navigate the menu with arrow keys and Enter. Press `Escape` to go back, `Q` to quit.
+
+-----
 
 ## Wipe Standards
 
-| ID        | Name                     | Passes | Verify |
-|-----------|--------------------------|--------|--------|
-| `zero`    | Zero Fill                | 1      | No     |
-| `random`  | Random (1-Pass)          | 1      | No     |
-| `dod3`    | DoD 5220.22-M (3-Pass)   | 3      | Yes    |
-| `dod7`    | DoD 5220.22-M ECE (7-Pass)| 7     | Yes    |
-| `gutmann` | Gutmann (35-Pass)        | 35     | No     |
+|ID       |Name             |Passes|Notes                                   |
+|---------|-----------------|------|----------------------------------------|
+|`zero`   |Zero Fill        |1     |Fast, not forensically secure           |
+|`random` |Random           |1     |Single pass of cryptographic random data|
+|`dod3`   |DoD 5220.22-M    |3     |US DoD standard — zeros, ones, random   |
+|`dod7`   |DoD 5220.22-M ECE|7     |Extended DoD — recommended default      |
+|`gutmann`|Gutmann          |35    |Maximum security for older HDDs         |
 
-## Requirements
+-----
 
-- Python 3.11+
-- Linux or macOS (Windows not supported)
+## Logs
+
+All operations are appended to `~/.aufur_wizard/history.log` in JSON format. Viewable from within the app under **View history**.
+
+-----
 
 ## License
 
-Public domain — see [LICENSE](LICENSE).
+Public domain — see <LICENSE>.
