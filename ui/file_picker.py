@@ -16,7 +16,6 @@ from ..core.shredder import EventType, ShredEvent, shred_directory, shred_file
 from ..core.standards import ALL_STANDARDS
 from ..utils.logger import log_operation
 from ..utils.permissions import can_write
-from .path_browser import PathBrowser
 
 
 _STANDARD_OPTIONS = [(s.name, s.id) for s in ALL_STANDARDS.values()]
@@ -30,7 +29,7 @@ class FilePicker(Screen):
     }
 
     #card {
-        width: 64;
+        width: 60;
         height: auto;
         border: round $primary;
         padding: 1 2;
@@ -51,21 +50,6 @@ class FilePicker(Screen):
         margin-bottom: 1;
     }
 
-    /* path row: input stretches, browse button stays fixed */
-    #path-row {
-        height: auto;
-        margin-bottom: 1;
-    }
-
-    #path_input {
-        width: 1fr;
-    }
-
-    #btn_browse {
-        width: auto;
-        margin-left: 1;
-    }
-
     Button {
         margin-right: 1;
     }
@@ -77,9 +61,7 @@ class FilePicker(Screen):
         yield Header()
         with Vertical(id="card"):
             yield Label("Path (file or folder)")
-            with Horizontal(id="path-row"):
-                yield Input(placeholder="/home/user/secret_stuff", id="path_input")
-                yield Button("Browse…", id="btn_browse")
+            yield Input(placeholder="/home/user/secret_stuff", id="path_input")
             yield Label("Standard", classes="row")
             yield Select(_STANDARD_OPTIONS, value="dod3", id="standard_select")
             with Horizontal(classes="row"):
@@ -90,24 +72,10 @@ class FilePicker(Screen):
         yield Footer()
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
-        match event.button.id:
-            case "btn_back":
-                self.app.pop_screen()
-            case "btn_shred":
-                self._start_shred()
-            case "btn_browse":
-                self._open_browser()
-
-    def _open_browser(self) -> None:
-        """Push PathBrowser modal; fill the input when user confirms."""
-        current = self.query_one("#path_input", Input).value.strip()
-        start = Path(current) if current else None
-
-        def _on_dismiss(selected: Path | None) -> None:
-            if selected is not None:
-                self.query_one("#path_input", Input).value = str(selected)
-
-        self.app.push_screen(PathBrowser(start=start), _on_dismiss)
+        if event.button.id == "btn_back":
+            self.app.pop_screen()
+        elif event.button.id == "btn_shred":
+            self._start_shred()
 
     def _start_shred(self) -> None:
         path_str = self.query_one("#path_input", Input).value.strip()
@@ -126,30 +94,33 @@ class FilePicker(Screen):
 
         self._set_status(f"Shredding with [bold]{standard.name}[/bold]…")
         self.query_one("#btn_shred", Button).disabled = True
-        self.query_one("#btn_browse", Button).disabled = True
         self.query_one("#progress", ProgressBar).update(progress=0)
 
-        self._bytes_total   = 0
-        self._bytes_written = 0
-        self._success       = 0
-        self._errors        = 0
+        self._success = 0
+        self._errors = 0
+        self._total_bytes_written = 0
+        self._total_bytes_overall = 0
+        self._last_chunk = 0
 
         def run() -> None:
             if path.is_file():
                 ok = shred_file(path, standard, self._on_event)
                 self._success = int(ok)
-                self._errors  = int(not ok)
+                self._errors = int(not ok)
             else:
-                self._success, self._errors = shred_directory(
-                    path, standard, self._on_event
+                all_files = sorted(p for p in path.rglob("*") if p.is_file())
+                self._total_bytes_overall = sum(
+                    f.stat().st_size for f in all_files if f.exists()
                 )
+                self._success, self._errors = shred_directory(path, standard, self._on_event)
+
             log_operation(
                 target=str(path),
                 standard_id=standard.id,
                 standard_name=standard.name,
                 success=self._success,
                 errors=self._errors,
-                bytes_wiped=self._bytes_written,
+                bytes_wiped=self._total_bytes_written,
             )
             self.call_from_thread(self._on_done)
 
@@ -157,18 +128,24 @@ class FilePicker(Screen):
 
     def _on_event(self, event: ShredEvent) -> None:
         if event.type == EventType.PASS_PROGRESS:
-            self._bytes_written = event.bytes_written
-            self._bytes_total   = event.bytes_total
-            if event.bytes_total:
-                pct = int(event.bytes_written / event.bytes_total * 100)
+            self._total_bytes_written += event.bytes_written - self._last_chunk
+            self._last_chunk = event.bytes_written
+            if event.bytes_total == event.bytes_written:
+                self._last_chunk = 0
+
+            total = self._total_bytes_overall or event.bytes_total
+            if total:
+                pct = min(int(self._total_bytes_written / total * 100), 99)
                 self.call_from_thread(
                     self.query_one("#progress", ProgressBar).update, progress=pct
                 )
-                self.call_from_thread(
-                    self._set_status,
-                    f"Pass {event.pass_index + 1}/{event.pass_total} – "
-                    f"{event.pass_label}  ({pct}%)",
-                )
+            self.call_from_thread(
+                self._set_status,
+                f"Pass {event.pass_index + 1}/{event.pass_total} – "
+                f"{event.pass_label}  ({event.bytes_written // 1024 // 1024} MB)",
+            )
+        elif event.type == EventType.FILE_DONE:
+            self._last_chunk = 0
         elif event.type == EventType.ERROR:
             self.call_from_thread(
                 self._set_status, f"[red]Error: {event.message}[/red]"
@@ -176,7 +153,6 @@ class FilePicker(Screen):
 
     def _on_done(self) -> None:
         self.query_one("#btn_shred", Button).disabled = False
-        self.query_one("#btn_browse", Button).disabled = False
         self.query_one("#progress", ProgressBar).update(progress=100)
         if self._errors:
             self._set_status(
