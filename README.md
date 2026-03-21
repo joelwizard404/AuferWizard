@@ -70,4 +70,4 @@ All operations are appended to `~/.aufur_wizard/history.log` in JSON format. Vie
 
 ## License
 
-Public domain — see <LICENSE>.
+The Unlicense.
